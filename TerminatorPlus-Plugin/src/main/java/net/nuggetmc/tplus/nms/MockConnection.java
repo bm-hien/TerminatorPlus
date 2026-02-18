@@ -30,8 +30,12 @@ public class MockConnection extends Connection {
             // Fallback: search by type
             for (Field field : Connection.class.getDeclaredFields()) {
                 field.setAccessible(true);
-                if (PacketListener.class.isAssignableFrom(field.getType()) && packetListenerField == null) {
-                    packetListenerField = field;
+                if (PacketListener.class.isAssignableFrom(field.getType())) {
+                    if (packetListenerField == null) {
+                        packetListenerField = field;
+                    } else if (disconnectListenerField == null) {
+                        disconnectListenerField = field;
+                    }
                 }
             }
         }

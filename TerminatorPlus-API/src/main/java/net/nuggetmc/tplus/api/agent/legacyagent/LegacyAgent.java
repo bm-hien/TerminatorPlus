@@ -36,6 +36,10 @@ import java.util.regex.Pattern;
 public class LegacyAgent extends Agent {
 
     private static final Pattern NAME_PATTERN = Pattern.compile("[^A-Za-z]+");
+    private static final double SWIM_DIVE_THRESHOLD = -0.5;
+    private static final double SWIM_SURFACE_THRESHOLD = 0.5;
+    private static final double SWIM_BASE_SPEED = 0.08;
+    private static final double SWIM_SPRINT_DISTANCE = 5;
     public final Set<Terminator> noFace = new HashSet<>();
     public final Set<LivingEntity> noJump = new HashSet<>();
     public final Set<Terminator> slow = new HashSet<>();
@@ -148,7 +152,7 @@ public class LegacyAgent extends Agent {
             bot.setDefaultItem(new ItemStack(weapon));
         }
 
-        // Upgrade armor
+        // Upgrade armor - compare tiers and upgrade if new tier is better
         ItemStack[] currentArmor = botPlayer.getInventory().getArmorContents();
         ItemStack[] newArmor = new ItemStack[]{
                 new ItemStack(boots),
@@ -159,7 +163,8 @@ public class LegacyAgent extends Agent {
 
         boolean needsUpgrade = false;
         for (int i = 0; i < 4; i++) {
-            if (currentArmor[i] == null || currentArmor[i].getType() == Material.AIR) {
+            if (currentArmor[i] == null || currentArmor[i].getType() == Material.AIR
+                    || getArmorTier(currentArmor[i].getType()) < getArmorTier(newArmor[i].getType())) {
                 needsUpgrade = true;
                 break;
             }
@@ -172,6 +177,17 @@ public class LegacyAgent extends Agent {
             bot.setItem(newArmor[2], org.bukkit.inventory.EquipmentSlot.CHEST);
             bot.setItem(newArmor[3], org.bukkit.inventory.EquipmentSlot.HEAD);
         }
+    }
+
+    private static int getArmorTier(Material mat) {
+        String name = mat.name();
+        if (name.startsWith("NETHERITE_")) return 5;
+        if (name.startsWith("DIAMOND_")) return 4;
+        if (name.startsWith("IRON_")) return 3;
+        if (name.startsWith("CHAINMAIL_")) return 2;
+        if (name.startsWith("GOLDEN_")) return 1;
+        if (name.startsWith("LEATHER_")) return 1;
+        return 0;
     }
 
     private void tickBot(Terminator bot) {
@@ -518,15 +534,15 @@ public class LegacyAgent extends Agent {
 
         // Improved underwater pursuit: always move towards target in 3D
         double yDiff = targetLoc.getY() - at.getY();
-        if (yDiff < -0.5) {
+        if (yDiff < SWIM_DIVE_THRESHOLD) {
             // Target is below us - dive down aggressively
-            vector.setY(Math.max(vector.getY(), -0.5));
-        } else if (yDiff > 0.5) {
+            vector.setY(Math.max(vector.getY(), SWIM_DIVE_THRESHOLD));
+        } else if (yDiff > SWIM_SURFACE_THRESHOLD) {
             // Target is above us - swim up
-            vector.setY(Math.min(vector.getY() + 0.3, 0.5));
+            vector.setY(Math.min(vector.getY() + 0.3, SWIM_SURFACE_THRESHOLD));
         }
 
-        vector.normalize().multiply(0.08);
+        vector.normalize().multiply(SWIM_BASE_SPEED);
         vector.setY(vector.getY() * 1.4);
 
         if (miningAnim.containsKey(playerNPC)) {
@@ -548,7 +564,7 @@ public class LegacyAgent extends Agent {
 
         // Sprint-swim boost when target is far in water
         double distance = at.distance(targetLoc);
-        if (distance > 5 && bot.isBotInWater()) {
+        if (distance > SWIM_SPRINT_DISTANCE && bot.isBotInWater()) {
             vector.multiply(1.3);
         }
 

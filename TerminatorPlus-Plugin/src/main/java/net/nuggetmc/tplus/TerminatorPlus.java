@@ -87,12 +87,17 @@ public class TerminatorPlus extends JavaPlugin {
     /**
      * Check if the running server version is compatible with this plugin build.
      * Accepts exact match or same major.minor version (e.g., 1.21.x).
+     * Pre-release identifiers (e.g., 1.21-pre1) are stripped before comparison.
      */
     private static boolean checkVersionCompatibility(String serverVersion) {
         if (serverVersion.equals(COMPILED_VERSION)) return true;
 
-        String[] serverParts = serverVersion.split("\\.");
-        String[] compiledParts = COMPILED_VERSION.split("\\.");
+        // Strip pre-release identifiers (e.g., "1.21.1-pre1" -> "1.21.1")
+        String cleanServer = serverVersion.split("-")[0];
+        String cleanCompiled = COMPILED_VERSION.split("-")[0];
+
+        String[] serverParts = cleanServer.split("\\.");
+        String[] compiledParts = cleanCompiled.split("\\.");
 
         if (serverParts.length >= 2 && compiledParts.length >= 2) {
             return serverParts[0].equals(compiledParts[0]) && serverParts[1].equals(compiledParts[1]);
