@@ -42,7 +42,7 @@ public class MCLogs {
         String freeMemory = String.format("%.2f", (double) (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1024 / 1024) + "MB";
         String maxMemory = String.format("%.2f", (double) Runtime.getRuntime().maxMemory() / 1024 / 1024) + "MB";
 
-        String info = String.format(FORMAT, pluginVersion, serverVersion, serverSoftware, serverPlugins, serverTPS, freeMemory, maxMemory, TerminatorPlus.isCorrectVersion(), TerminatorPlus.REQUIRED_VERSION);
+        String info = String.format(FORMAT, pluginVersion, serverVersion, serverSoftware, serverPlugins, serverTPS, freeMemory, maxMemory, TerminatorPlus.isCompatibleVersion(), TerminatorPlus.COMPILED_VERSION);
         return pasteText(info);
     }
 

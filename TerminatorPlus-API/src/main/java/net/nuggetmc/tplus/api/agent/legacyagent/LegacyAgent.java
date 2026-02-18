@@ -36,6 +36,10 @@ import java.util.regex.Pattern;
 public class LegacyAgent extends Agent {
 
     private static final Pattern NAME_PATTERN = Pattern.compile("[^A-Za-z]+");
+    private static final double SWIM_DIVE_THRESHOLD = -0.5;
+    private static final double SWIM_SURFACE_THRESHOLD = 0.5;
+    private static final double SWIM_BASE_SPEED = 0.08;
+    private static final double SWIM_SPRINT_DISTANCE = 5;
     public final Set<Terminator> noFace = new HashSet<>();
     public final Set<LivingEntity> noJump = new HashSet<>();
     public final Set<Terminator> slow = new HashSet<>();
@@ -49,6 +53,7 @@ public class LegacyAgent extends Agent {
     private final Map<Block, Short> crackList = new HashMap<>();
     private final Map<BukkitRunnable, Byte> mining = new HashMap<>();
     private final Set<Terminator> fallDamageCooldown = new HashSet<>();
+    private final Set<Terminator> bowCooldown = new HashSet<>();
     public boolean offsets = true;
     private List<LivingEntity> botsInPlayerList;
     private EnumTargetGoal goal;
@@ -102,6 +107,89 @@ public class LegacyAgent extends Agent {
         btList.put(botEntity, loc);
     }
 
+    /**
+     * Auto-equip: bots automatically upgrade their weapons and armor over time.
+     * The upgrade tier increases based on how long the bot has been alive.
+     */
+    private void autoEquip(Terminator bot) {
+        int ticks = bot.getAliveTicks();
+        LivingEntity botEntity = bot.getBukkitEntity();
+        if (!(botEntity instanceof Player botPlayer)) return;
+
+        // Weapon upgrade tiers based on alive time
+        Material weapon;
+        Material helmet, chestplate, leggings, boots;
+
+        if (ticks > 6000) {
+            // After 5 minutes: diamond gear
+            weapon = Material.DIAMOND_SWORD;
+            helmet = Material.DIAMOND_HELMET;
+            chestplate = Material.DIAMOND_CHESTPLATE;
+            leggings = Material.DIAMOND_LEGGINGS;
+            boots = Material.DIAMOND_BOOTS;
+        } else if (ticks > 3600) {
+            // After 3 minutes: iron gear
+            weapon = Material.IRON_SWORD;
+            helmet = Material.IRON_HELMET;
+            chestplate = Material.IRON_CHESTPLATE;
+            leggings = Material.IRON_LEGGINGS;
+            boots = Material.IRON_BOOTS;
+        } else if (ticks > 1200) {
+            // After 1 minute: stone sword, leather armor
+            weapon = Material.STONE_SWORD;
+            helmet = Material.LEATHER_HELMET;
+            chestplate = Material.LEATHER_CHESTPLATE;
+            leggings = Material.LEATHER_LEGGINGS;
+            boots = Material.LEATHER_BOOTS;
+        } else {
+            return;
+        }
+
+        // Only upgrade weapon if current one is weaker
+        double currentDamage = net.nuggetmc.tplus.api.utils.ItemUtils.getLegacyAttackDamage(bot.getBukkitEntity().getEquipment().getItemInMainHand());
+        double newDamage = net.nuggetmc.tplus.api.utils.ItemUtils.getLegacyAttackDamage(new ItemStack(weapon));
+        if (newDamage > currentDamage) {
+            bot.setDefaultItem(new ItemStack(weapon));
+        }
+
+        // Upgrade armor - compare tiers and upgrade if new tier is better
+        ItemStack[] currentArmor = botPlayer.getInventory().getArmorContents();
+        ItemStack[] newArmor = new ItemStack[]{
+                new ItemStack(boots),
+                new ItemStack(leggings),
+                new ItemStack(chestplate),
+                new ItemStack(helmet)
+        };
+
+        boolean needsUpgrade = false;
+        for (int i = 0; i < 4; i++) {
+            if (currentArmor[i] == null || currentArmor[i].getType() == Material.AIR
+                    || getArmorTier(currentArmor[i].getType()) < getArmorTier(newArmor[i].getType())) {
+                needsUpgrade = true;
+                break;
+            }
+        }
+
+        if (needsUpgrade) {
+            botPlayer.getInventory().setArmorContents(newArmor);
+            bot.setItem(newArmor[0], org.bukkit.inventory.EquipmentSlot.FEET);
+            bot.setItem(newArmor[1], org.bukkit.inventory.EquipmentSlot.LEGS);
+            bot.setItem(newArmor[2], org.bukkit.inventory.EquipmentSlot.CHEST);
+            bot.setItem(newArmor[3], org.bukkit.inventory.EquipmentSlot.HEAD);
+        }
+    }
+
+    private static int getArmorTier(Material mat) {
+        String name = mat.name();
+        if (name.startsWith("NETHERITE_")) return 5;
+        if (name.startsWith("DIAMOND_")) return 4;
+        if (name.startsWith("IRON_")) return 3;
+        if (name.startsWith("CHAINMAIL_")) return 2;
+        if (name.startsWith("GOLDEN_")) return 1;
+        if (name.startsWith("LEATHER_")) return 1;
+        return 0;
+    }
+
     private void tickBot(Terminator bot) {
         if (!bot.isBotAlive()) {
             return;
@@ -109,6 +197,11 @@ public class LegacyAgent extends Agent {
 
         if (bot.tickDelay(20)) {
             center(bot);
+        }
+
+        // Auto-equip: periodically upgrade equipment
+        if (bot.tickDelay(100)) {
+            autoEquip(bot);
         }
 
         Location loc = bot.getLocation();
@@ -202,6 +295,14 @@ public class LegacyAgent extends Agent {
             }
         } else if (LegacyMats.WATER.contains(loc.getBlock().getType())) {
             swim(bot, target, botPlayer, livingTarget, LegacyMats.WATER.contains(loc.clone().add(0, -1, 0).getBlock().getType()));
+        } else {
+            // Bot is in the air and not on ground - if target is in water, try to move towards them
+            Location targetLoc = livingTarget.getLocation();
+            if (LegacyMats.WATER.contains(targetLoc.getBlock().getType())) {
+                Vector direction = targetLoc.toVector().subtract(loc.toVector()).normalize().multiply(0.15);
+                bot.addVelocity(direction);
+                bot.faceLocation(targetLoc);
+            }
         }
     }
 
@@ -227,10 +328,14 @@ public class LegacyAgent extends Agent {
 
         double distance = loc.distance(target);
 
-        if (distance <= 5) {
+        // Improved chase: sprint-like speed boost when target is far away
+        if (distance <= 3) {
             vel.multiply(0.3);
-        } else {
+        } else if (distance <= 8) {
             vel.multiply(0.4);
+        } else {
+            // Sprint speed for long-distance chasing
+            vel.multiply(0.5);
         }
 
         if (slow.contains(bot)) {
@@ -423,14 +528,22 @@ public class LegacyAgent extends Agent {
         }
 
         Location at = bot.getLocation();
+        Location targetLoc = target.getLocation();
 
         Vector vector = loc.toVector().subtract(at.toVector());
-        if (at.getBlockY() < target.getLocation().getBlockY()) {
-            vector.setY(0);
+
+        // Improved underwater pursuit: always move towards target in 3D
+        double yDiff = targetLoc.getY() - at.getY();
+        if (yDiff < SWIM_DIVE_THRESHOLD) {
+            // Target is below us - dive down aggressively
+            vector.setY(Math.max(vector.getY(), SWIM_DIVE_THRESHOLD));
+        } else if (yDiff > SWIM_SURFACE_THRESHOLD) {
+            // Target is above us - swim up
+            vector.setY(Math.min(vector.getY() + 0.3, SWIM_SURFACE_THRESHOLD));
         }
 
-        vector.normalize().multiply(0.05);
-        vector.setY(vector.getY() * 1.2);
+        vector.normalize().multiply(SWIM_BASE_SPEED);
+        vector.setY(vector.getY() * 1.4);
 
         if (miningAnim.containsKey(playerNPC)) {
             BukkitRunnable task = miningAnim.get(playerNPC);
@@ -442,13 +555,30 @@ public class LegacyAgent extends Agent {
 
         if (anim) {
             bot.swim();
+            // Faster swimming speed when actively pursuing
+            vector.multiply(1.5);
         } else {
             vector.setY(0);
-            vector.multiply(0.7);
+            vector.multiply(0.9);
         }
 
-        bot.faceLocation(target.getLocation());
+        // Sprint-swim boost when target is far in water
+        double distance = at.distance(targetLoc);
+        if (distance > SWIM_SPRINT_DISTANCE && bot.isBotInWater()) {
+            vector.multiply(1.3);
+        }
+
+        bot.faceLocation(targetLoc);
         bot.addVelocity(vector);
+
+        // Attempt ranged attack while swimming if target is visible and far
+        if (bot.tickDelay(3) && distance >= 4 && distance <= 32) {
+            Location botEyeLoc = playerNPC.getEyeLocation();
+            Location playerEyeLoc = target.getEyeLocation();
+            if (LegacyUtils.checkFreeSpace(botEyeLoc, playerEyeLoc)) {
+                attack(bot, target, at);
+            }
+        }
     }
 
     private void stopMining(Terminator bot) {
@@ -1394,7 +1524,23 @@ public class LegacyAgent extends Agent {
     }
 
     private void attack(Terminator bot, LivingEntity target, Location loc) {
-        if ((target instanceof Player && PlayerUtils.isInvincible(((Player) target).getGameMode())) || target.getNoDamageTicks() >= 5 || loc.distance(target.getLocation()) >= 4)
+        if (target instanceof Player && PlayerUtils.isInvincible(((Player) target).getGameMode()))
+            return;
+
+        double distance = loc.distance(target.getLocation());
+
+        // Ranged attack with bow when target is far away
+        if (distance >= 4 && distance <= 32 && !bowCooldown.contains(bot)) {
+            bowCooldown.add(bot);
+            bot.faceLocation(target.getLocation());
+            bot.shootBow(target);
+
+            scheduler.runTaskLater(plugin, () -> bowCooldown.remove(bot), 20);
+            return;
+        }
+
+        // Melee attack
+        if (target.getNoDamageTicks() >= 5 || distance >= 4)
             return;
 
         bot.attack(target);

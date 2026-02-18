@@ -16,16 +16,42 @@ public class MockConnection extends Connection {
     private static final Field DISCONNECT_LISTENER_FIELD;
 
     static {
-        try {
-            // https://mappings.cephx.dev/1.20.4/net/minecraft/network/Connection.html packetListener & disconnectListener
-            PACKET_LISTENER_FIELD = Connection.class.getDeclaredField("q");
-            DISCONNECT_LISTENER_FIELD = Connection.class.getDeclaredField("p");
+        Field packetListenerField = null;
+        Field disconnectListenerField = null;
 
-            PACKET_LISTENER_FIELD.setAccessible(true);
-            DISCONNECT_LISTENER_FIELD.setAccessible(true);
-        } catch (NoSuchFieldException e) {
-            throw new RuntimeException(e);
+        try {
+            // Try known field names from different versions
+            packetListenerField = findField(Connection.class, "q", "packetListener");
+            disconnectListenerField = findField(Connection.class, "p", "disconnectListener");
+
+            if (packetListenerField != null) packetListenerField.setAccessible(true);
+            if (disconnectListenerField != null) disconnectListenerField.setAccessible(true);
+        } catch (Exception e) {
+            // Fallback: search by type
+            for (Field field : Connection.class.getDeclaredFields()) {
+                field.setAccessible(true);
+                if (PacketListener.class.isAssignableFrom(field.getType())) {
+                    if (packetListenerField == null) {
+                        packetListenerField = field;
+                    } else if (disconnectListenerField == null) {
+                        disconnectListenerField = field;
+                    }
+                }
+            }
         }
+
+        PACKET_LISTENER_FIELD = packetListenerField;
+        DISCONNECT_LISTENER_FIELD = disconnectListenerField;
+    }
+
+    private static Field findField(Class<?> clazz, String... names) {
+        for (String name : names) {
+            try {
+                return clazz.getDeclaredField(name);
+            } catch (NoSuchFieldException ignored) {
+            }
+        }
+        return null;
     }
 
     public MockConnection() {
@@ -59,8 +85,12 @@ public class MockConnection extends Connection {
     @Override
     public void setListenerForServerboundHandshake(@NotNull PacketListener packetListener) {
         try {
-            PACKET_LISTENER_FIELD.set(this, packetListener);
-            DISCONNECT_LISTENER_FIELD.set(this, null);
+            if (PACKET_LISTENER_FIELD != null) {
+                PACKET_LISTENER_FIELD.set(this, packetListener);
+            }
+            if (DISCONNECT_LISTENER_FIELD != null) {
+                DISCONNECT_LISTENER_FIELD.set(this, null);
+            }
         } catch (IllegalAccessException e) {
             throw new RuntimeException(e);
         }

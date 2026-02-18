@@ -73,10 +73,8 @@ public abstract class CommandInstance extends BukkitCommand {
             sender.sendMessage(ChatColor.RED + "You do not have permission to use this command. (Check if you are OP.)");
             return false;
         }
-        if (!TerminatorPlus.isCorrectVersion()) {
-            sender.sendMessage(ChatColor.RED + "You are not running the correct server version of Minecraft!");
-            sender.sendMessage(ChatColor.RED + "You are using MC server version " + TerminatorPlus.getMcVersion() + " but this plugin requires " + TerminatorPlus.REQUIRED_VERSION);
-            return false;
+        if (!TerminatorPlus.isCompatibleVersion()) {
+            sender.sendMessage(ChatColor.YELLOW + "Warning: Plugin was compiled for " + TerminatorPlus.COMPILED_VERSION + " but running on " + TerminatorPlus.getMcVersion() + ". Some features may not work correctly.");
         }
 
         CommandMethod method;

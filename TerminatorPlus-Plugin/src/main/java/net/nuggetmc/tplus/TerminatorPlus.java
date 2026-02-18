@@ -12,13 +12,13 @@ import java.util.Arrays;
 
 public class TerminatorPlus extends JavaPlugin {
 
-    public static final String REQUIRED_VERSION = "1.21.1";
+    public static final String COMPILED_VERSION = "1.21.1";
 
     private static TerminatorPlus instance;
     private static String version;
     private static String mcVersion;
 
-    private static boolean correctVersion;
+    private static boolean compatibleVersion;
 
     private BotManagerImpl manager;
     private CommandHandler handler;
@@ -31,8 +31,8 @@ public class TerminatorPlus extends JavaPlugin {
         return version;
     }
 
-    public static boolean isCorrectVersion() {
-        return correctVersion;
+    public static boolean isCompatibleVersion() {
+        return compatibleVersion;
     }
 
     public static String getMcVersion() {
@@ -53,8 +53,8 @@ public class TerminatorPlus extends JavaPlugin {
         version = getDescription().getVersion();
 
         mcVersion = Bukkit.getServer().getMinecraftVersion();
-        correctVersion = mcVersion.equals(REQUIRED_VERSION);
-        getLogger().info("Running on version: " + mcVersion + ", required version: " + REQUIRED_VERSION + ", correct version: " + correctVersion);
+        compatibleVersion = checkVersionCompatibility(mcVersion);
+        getLogger().info("Running on version: " + mcVersion + ", compiled for: " + COMPILED_VERSION + ", compatible: " + compatibleVersion);
 
         // Create Instances
         this.manager = new BotManagerImpl();
@@ -66,14 +66,12 @@ public class TerminatorPlus extends JavaPlugin {
         // Register event listeners
         this.registerEvents(manager);
 
-        if (!correctVersion) {
-            for (int i = 0; i < 20; i++) { // Kids are stupid so we need to make sure they see this
-                getLogger().severe("----------------------------------------");
-                getLogger().severe("TerminatorPlus is not compatible with your server version!");
-                getLogger().severe("You are running on version: " + mcVersion + ", required version: " + REQUIRED_VERSION);
-                getLogger().severe("Either download the correct version of TerminatorPlus or update your server. (https://papermc.io/downloads)");
-                getLogger().severe("----------------------------------------");
-            }
+        if (!compatibleVersion) {
+            getLogger().warning("----------------------------------------");
+            getLogger().warning("TerminatorPlus was compiled for " + COMPILED_VERSION + " but is running on " + mcVersion + ".");
+            getLogger().warning("Some features may not work correctly. For best results, use a matching server version.");
+            getLogger().warning("The plugin will still attempt to load and function.");
+            getLogger().warning("----------------------------------------");
         }
     }
 
@@ -84,5 +82,27 @@ public class TerminatorPlus extends JavaPlugin {
 
     private void registerEvents(Listener... listeners) {
         Arrays.stream(listeners).forEach(li -> this.getServer().getPluginManager().registerEvents(li, this));
+    }
+
+    /**
+     * Check if the running server version is compatible with this plugin build.
+     * Accepts exact match or same major.minor version (e.g., 1.21.x).
+     * Pre-release identifiers (e.g., 1.21-pre1) are stripped before comparison.
+     */
+    private static boolean checkVersionCompatibility(String serverVersion) {
+        if (serverVersion.equals(COMPILED_VERSION)) return true;
+
+        // Strip pre-release identifiers (e.g., "1.21.1-pre1" -> "1.21.1")
+        String cleanServer = serverVersion.split("-")[0];
+        String cleanCompiled = COMPILED_VERSION.split("-")[0];
+
+        String[] serverParts = cleanServer.split("\\.");
+        String[] compiledParts = cleanCompiled.split("\\.");
+
+        if (serverParts.length >= 2 && compiledParts.length >= 2) {
+            return serverParts[0].equals(compiledParts[0]) && serverParts[1].equals(compiledParts[1]);
+        }
+
+        return false;
     }
 }
