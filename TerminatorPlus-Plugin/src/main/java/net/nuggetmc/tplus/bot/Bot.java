@@ -516,6 +516,33 @@ public class Bot extends ServerPlayer implements Terminator {
         swing(InteractionHand.MAIN_HAND);
     }
 
+    @Override
+    public void shootBow(org.bukkit.entity.LivingEntity target) {
+        faceLocation(target.getLocation());
+        setItem(new ItemStack(Material.BOW));
+        punch();
+
+        Location eyeLoc = getBukkitEntity().getEyeLocation();
+        Location targetLoc = target.getLocation().add(0, target.getHeight() / 2, 0);
+        Vector direction = targetLoc.toVector().subtract(eyeLoc.toVector());
+        double distance = direction.length();
+        direction.normalize();
+
+        // Add vertical compensation for gravity over distance
+        double gravity = 0.05;
+        double travelTime = distance / 3.0;
+        direction.setY(direction.getY() + gravity * travelTime * 0.5);
+        direction.normalize();
+
+        org.bukkit.entity.Arrow arrow = getBukkitEntity().getWorld().spawnArrow(
+                eyeLoc, direction, (float) Math.min(3.0, 1.5 + distance * 0.1), 0.5f);
+        arrow.setShooter(getBukkitEntity());
+        arrow.setDamage(6.0);
+        arrow.setPickupStatus(org.bukkit.entity.AbstractArrow.PickupStatus.DISALLOWED);
+
+        getBukkitEntity().getWorld().playSound(eyeLoc, Sound.ENTITY_ARROW_SHOOT, 1, 1);
+    }
+
     public boolean checkGround() {
         double vy = velocity.getY();
 

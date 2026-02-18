@@ -79,6 +79,8 @@ public interface Terminator {
 
     void punch();
 
+    void shootBow(LivingEntity target);
+
     void swim();
 
     void sneak();
