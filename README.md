@@ -36,7 +36,17 @@ Terminator terminator = TerminatorPlusAPI.getBotManager().createBot(location, "B
 
 ### Version Support
 
-This plugin requires [Paper 1.21.1](https://papermc.io/downloads/all).
+This plugin is compiled against [Paper 1.21.1](https://papermc.io/downloads/all) but will attempt to load on compatible versions (same major.minor, e.g., 1.21.x). For best results, use the exact version the plugin was compiled for. A warning will be shown if running on a different version.
+
+### Features
+
+- **Ranged Combat**: Bots can use bows to attack targets at range (4-32 blocks) when they have line of sight
+- **Auto-Equip**: Bots automatically upgrade their weapons and armor over time (leather → iron → diamond)
+- **Underwater Pursuit**: Improved swimming AI allows bots to chase players effectively underwater with faster swim speed and 3D targeting
+- **Sprint Chase**: Enhanced chase speed when targets are far away, making it harder for players to escape
+- **Block Placing/Breaking**: Intelligent block placement and breaking to navigate obstacles
+- **Fall Damage Prevention**: Water bucket MLG and twisting vine clutching
+- **Shield Blocking**: Bots can use shields to block attacks
 
 ### Future Updates
 
